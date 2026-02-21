@@ -251,14 +251,21 @@ impl InstanceManager {
         Ok(())
     }
 
-    /// Send text input to an instance's tmux pane.
-    pub async fn send_input(&self, id: Uuid, text: &str) -> Result<(), AppError> {
+    /// Send a prompt to an instance's tmux pane (text, then delay, then Enter).
+    pub async fn send_prompt(&self, id: Uuid, text: &str) -> Result<(), AppError> {
         let (socket, session) = self.get_tmux_info(id)?;
 
         let text = text.to_string();
-        task::spawn_blocking(move || sandbox::tmux_send_keys(&socket, &session, &text))
-            .await
-            .map_err(|e| AppError::Internal(format!("join error: {}", e)))??;
+        task::spawn_blocking(move || {
+            // Send text without Enter
+            sandbox::tmux_send_keys_raw(&socket, &session, &[&text])?;
+            // Let the TUI process the text
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            // Now press Enter
+            sandbox::tmux_send_keys_raw(&socket, &session, &["Enter"])
+        })
+        .await
+        .map_err(|e| AppError::Internal(format!("join error: {}", e)))??;
 
         Ok(())
     }

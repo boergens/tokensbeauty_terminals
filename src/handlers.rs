@@ -100,7 +100,7 @@ pub async fn send_prompt(
     Path(id): Path<Uuid>,
     Json(req): Json<PromptRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    mgr.send_input(id, &req.prompt).await.map_err(|e| {
+    mgr.send_prompt(id, &req.prompt).await.map_err(|e| {
         error!(%id, prompt = %req.prompt, %e, "failed to send prompt");
         e
     })?;
