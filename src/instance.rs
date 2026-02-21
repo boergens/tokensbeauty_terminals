@@ -18,6 +18,8 @@ pub struct Instance {
     pub tmux_socket: String,
     pub tmux_session: String,
     pub created_at: std::time::Instant,
+    pub ttyd_port: Option<u16>,
+    pub ttyd_pid: Option<u32>,
 }
 
 impl Instance {
@@ -31,6 +33,8 @@ impl Instance {
             tmux_socket,
             tmux_session,
             created_at: std::time::Instant::now(),
+            ttyd_port: None,
+            ttyd_pid: None,
         }
     }
 
@@ -40,6 +44,7 @@ impl Instance {
             status: self.status.clone(),
             workspace: self.workspace.display().to_string(),
             uptime_secs: self.created_at.elapsed().as_secs(),
+            ttyd_port: self.ttyd_port,
         }
     }
 }
@@ -50,4 +55,6 @@ pub struct InstanceInfo {
     pub status: InstanceStatus,
     pub workspace: String,
     pub uptime_secs: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ttyd_port: Option<u16>,
 }

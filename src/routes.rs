@@ -19,5 +19,9 @@ pub fn build_router(manager: InstanceManager) -> Router {
         .route("/instances/{id}/input", post(handlers::send_input))
         .route("/instances/{id}/screen", get(handlers::capture_screen))
         .route("/instances/{id}/exec", post(handlers::exec_command))
+        .route(
+            "/instances/{id}/ttyd",
+            post(handlers::start_ttyd).delete(handlers::stop_ttyd),
+        )
         .with_state(manager)
 }

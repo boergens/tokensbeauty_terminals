@@ -124,3 +124,19 @@ pub async fn exec_command(
     let content = mgr.capture_screen(id).await?;
     Ok(Json(ScreenResponse { content }))
 }
+
+pub async fn start_ttyd(
+    State(mgr): State<InstanceManager>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let port = mgr.start_ttyd(id).await?;
+    Ok(Json(serde_json::json!({ "port": port })))
+}
+
+pub async fn stop_ttyd(
+    State(mgr): State<InstanceManager>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    mgr.stop_ttyd(id)?;
+    Ok(Json(serde_json::json!({ "status": "stopped" })))
+}
