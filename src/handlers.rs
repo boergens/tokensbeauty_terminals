@@ -15,9 +15,13 @@ use crate::manager::InstanceManager;
 // --- Request/Response types ---
 
 #[derive(Deserialize)]
-pub struct InputRequest {
-    pub text: Option<String>,
-    pub keys: Option<Vec<String>>,
+pub struct PromptRequest {
+    pub prompt: String,
+}
+
+#[derive(Deserialize)]
+pub struct KeysRequest {
+    pub keys: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -91,30 +95,27 @@ pub async fn destroy_instance(
     Ok(Json(serde_json::json!({ "status": "destroyed" })))
 }
 
-pub async fn send_input(
+pub async fn send_prompt(
     State(mgr): State<InstanceManager>,
     Path(id): Path<Uuid>,
-    Json(req): Json<InputRequest>,
+    Json(req): Json<PromptRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    let has_text = req.text.is_some();
-    let has_keys = req.keys.is_some();
-    if let Some(text) = &req.text {
-        mgr.send_input(id, text).await.map_err(|e| {
-            error!(%id, %text, %e, "failed to send input");
-            e
-        })?;
-    }
-    if let Some(keys) = req.keys {
-        mgr.send_keys_raw(id, keys.clone()).await.map_err(|e| {
-            error!(%id, ?keys, %e, "failed to send raw keys");
-            e
-        })?;
-    }
-    if !has_text && !has_keys {
-        return Err(AppError::BadRequest(
-            "must provide 'text' or 'keys'".into(),
-        ));
-    }
+    mgr.send_input(id, &req.prompt).await.map_err(|e| {
+        error!(%id, prompt = %req.prompt, %e, "failed to send prompt");
+        e
+    })?;
+    Ok(Json(serde_json::json!({ "status": "sent" })))
+}
+
+pub async fn send_keys(
+    State(mgr): State<InstanceManager>,
+    Path(id): Path<Uuid>,
+    Json(req): Json<KeysRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    mgr.send_keys_raw(id, req.keys.clone()).await.map_err(|e| {
+        error!(%id, ?req.keys, %e, "failed to send keys");
+        e
+    })?;
     Ok(Json(serde_json::json!({ "status": "sent" })))
 }
 

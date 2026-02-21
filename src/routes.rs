@@ -17,7 +17,8 @@ pub fn build_router(manager: InstanceManager) -> Router {
             "/instances/{id}",
             get(handlers::get_instance).delete(handlers::destroy_instance),
         )
-        .route("/instances/{id}/input", post(handlers::send_input))
+        .route("/instances/{id}/prompt", post(handlers::send_prompt))
+        .route("/instances/{id}/keys", post(handlers::send_keys))
         .route("/instances/{id}/screen", get(handlers::capture_screen))
         .route("/instances/{id}/response", post(handlers::receive_response))
         .route("/instances/{id}/events", get(handlers::instance_events))

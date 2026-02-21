@@ -72,7 +72,8 @@ The consumer holds open an SSE connection to `/instances/{id}/events` and receiv
 | `GET` | `/instances` | List all instances |
 | `GET` | `/instances/:id` | Get instance details |
 | `DELETE` | `/instances/:id` | Destroy an instance |
-| `POST` | `/instances/:id/input` | Send text/keys to terminal |
+| `POST` | `/instances/:id/prompt` | Send a prompt to Claude |
+| `POST` | `/instances/:id/keys` | Send raw keys to terminal |
 | `GET` | `/instances/:id/screen` | Capture terminal content |
 | `POST` | `/instances/:id/response` | Receive a response from the sandbox |
 | `GET` | `/instances/:id/events` | SSE stream of sandbox responses |
