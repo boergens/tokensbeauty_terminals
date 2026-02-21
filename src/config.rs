@@ -7,7 +7,7 @@ pub struct Config {
     pub pool_target_size: usize,
     pub pool_max_size: usize,
     pub workspace_base: String,
-    pub ttyd_base_port: u16,
+    pub claude_md_template: String,
 }
 
 impl Config {
@@ -28,10 +28,8 @@ impl Config {
                 .unwrap_or(10),
             workspace_base: env::var("WORKSPACE_BASE")
                 .unwrap_or_else(|_| "/tmp/terminals-workspaces".into()),
-            ttyd_base_port: env::var("TTYD_BASE_PORT")
-                .ok()
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(7681),
+            claude_md_template: env::var("CLAUDE_MD_TEMPLATE")
+                .unwrap_or_else(|_| "/home/kevin/project/tokensbeauty/CLAUDE.md.template".into()),
         }
     }
 }

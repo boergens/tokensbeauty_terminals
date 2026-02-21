@@ -27,6 +27,9 @@ async fn main() {
 
     let manager = InstanceManager::new(config.clone());
 
+    // Clean up any stale resources from previous runs
+    manager.cleanup_stale();
+
     // Start pool replenisher
     let pool_handle = pool::spawn_pool_replenisher(manager.clone());
 

@@ -3,7 +3,7 @@ use crate::error::{AppError, SandboxError};
 use crate::instance::{Instance, InstanceInfo, InstanceStatus};
 use crate::sandbox;
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU16, Ordering};
+use std::net::TcpListener;
 use std::sync::{Arc, Mutex};
 use tokio::task;
 use tracing::{error, info, warn};
@@ -15,16 +15,13 @@ pub type SharedState = Arc<Mutex<HashMap<Uuid, Instance>>>;
 pub struct InstanceManager {
     pub state: SharedState,
     pub config: Config,
-    next_ttyd_port: Arc<AtomicU16>,
 }
 
 impl InstanceManager {
     pub fn new(config: Config) -> Self {
-        let base_port = config.ttyd_base_port;
         Self {
             state: Arc::new(Mutex::new(HashMap::new())),
             config,
-            next_ttyd_port: Arc::new(AtomicU16::new(base_port)),
         }
     }
 
@@ -94,6 +91,12 @@ impl InstanceManager {
             }
         }
 
+        // Copy CLAUDE.md template if it exists
+        let template = std::path::Path::new(&self.config.claude_md_template);
+        if template.exists() {
+            let _ = std::fs::copy(template, workspace.join("CLAUDE.md"));
+        }
+
         let instance = Instance::new(id, workspace.clone());
         let socket = instance.tmux_socket.clone();
         let session = instance.tmux_session.clone();
@@ -104,20 +107,35 @@ impl InstanceManager {
         let boot_session = session.clone();
         task::spawn_blocking(move || {
             sandbox::tmux_new_session(&socket, &session, &ws)?;
-            // Give bash a moment to start, then launch claude
-            std::thread::sleep(std::time::Duration::from_millis(500));
-            sandbox::tmux_send_keys(&boot_socket, &boot_session, "claude")?;
+
+            // Wait for bash prompt to appear
+            wait_for_screen(&boot_socket, &boot_session, "$", 10)?;
+
+            // Launch claude
+            sandbox::tmux_send_keys(&boot_socket, &boot_session, "claude --dangerously-skip-permissions")?;
+
+            // Wait for the skip-permissions confirmation prompt
+            wait_for_screen(&boot_socket, &boot_session, "Skip permissions", 15)?;
+
+            // Select "Yes" and confirm
+            sandbox::tmux_send_keys_raw(&boot_socket, &boot_session, &["Down"])?;
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            sandbox::tmux_send_keys_raw(&boot_socket, &boot_session, &["Enter"])?;
+
             Ok::<(), SandboxError>(())
         })
         .await
         .map_err(|e| AppError::Internal(format!("join error: {}", e)))??;
 
-        let info = instance.info();
         {
             let mut state = self.state.lock().unwrap();
             state.insert(id, instance);
         }
 
+        // Start ttyd automatically
+        self.start_ttyd(id).await?;
+
+        let info = self.get_instance(id)?;
         info!(%id, "instance created");
         Ok(info)
     }
@@ -292,6 +310,52 @@ impl InstanceManager {
         }
     }
 
+    /// Clean up stale resources from previous runs.
+    /// Kills orphaned tmux servers with inst- sockets and removes leftover workspaces.
+    pub fn cleanup_stale(&self) {
+        info!("cleaning up stale resources from previous runs");
+
+        // Kill orphaned inst- tmux servers and remove socket files
+        let tmux_dir = format!("/tmp/tmux-{}", nix_uid());
+        if let Ok(entries) = std::fs::read_dir(&tmux_dir) {
+            for entry in entries.flatten() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if name.starts_with("inst-") {
+                    let _ = std::process::Command::new("tmux")
+                        .args(["-L", &name, "kill-server"])
+                        .output();
+                    let _ = std::fs::remove_file(entry.path());
+                    info!(socket = %name, "cleaned up stale tmux socket");
+                }
+            }
+        }
+
+        // Kill orphaned ttyd processes attached to inst- sockets
+        if let Ok(output) = std::process::Command::new("pkill")
+            .args(["-f", "ttyd.*inst-"])
+            .output()
+        {
+            if output.status.success() {
+                info!("killed orphaned ttyd processes");
+            }
+        }
+
+        // Remove leftover workspace directories
+        let workspace_base = std::path::Path::new(&self.config.workspace_base);
+        if workspace_base.exists() {
+            if let Ok(entries) = std::fs::read_dir(workspace_base) {
+                for entry in entries.flatten() {
+                    if entry.path().is_dir() {
+                        let _ = std::fs::remove_dir_all(entry.path());
+                        info!(path = %entry.path().display(), "cleaned up stale workspace");
+                    }
+                }
+            }
+        }
+
+        info!("stale cleanup complete");
+    }
+
     /// Start a ttyd process for an instance, exposing its tmux session read-only.
     pub async fn start_ttyd(&self, id: Uuid) -> Result<u16, AppError> {
         let (socket, session) = {
@@ -308,7 +372,8 @@ impl InstanceManager {
             (inst.tmux_socket.clone(), inst.tmux_session.clone())
         };
 
-        let port = self.next_ttyd_port.fetch_add(1, Ordering::Relaxed);
+        let port = find_available_port()
+            .ok_or_else(|| AppError::Internal("no available port for ttyd".into()))?;
 
         let port_str = port.to_string();
         let child = std::process::Command::new("ttyd")
@@ -379,6 +444,46 @@ impl InstanceManager {
 
         Ok((inst.tmux_socket.clone(), inst.tmux_session.clone()))
     }
+}
+
+/// Poll tmux screen until `needle` appears, or timeout after `max_secs`.
+fn wait_for_screen(socket: &str, session: &str, needle: &str, max_secs: u32) -> Result<(), SandboxError> {
+    use tracing::debug;
+    let interval = std::time::Duration::from_millis(500);
+    let max_attempts = (max_secs * 1000) / 500;
+    for attempt in 0..max_attempts {
+        if let Ok(content) = sandbox::tmux_capture_pane(socket, session) {
+            if content.contains(needle) {
+                debug!(needle, attempt, "screen match found");
+                return Ok(());
+            }
+        }
+        std::thread::sleep(interval);
+    }
+    Err(SandboxError::TmuxFailed(format!(
+        "timed out waiting for '{}' on screen after {}s",
+        needle, max_secs
+    )))
+}
+
+/// Find an available TCP port by binding to port 0 in the high range.
+fn find_available_port() -> Option<u16> {
+    // Bind to port 0 lets the OS pick a free ephemeral port
+    let listener = TcpListener::bind("127.0.0.1:0").ok()?;
+    let port = listener.local_addr().ok()?.port();
+    drop(listener);
+    Some(port)
+}
+
+/// Get the current user's UID.
+fn nix_uid() -> String {
+    std::process::Command::new("id")
+        .arg("-u")
+        .output()
+        .ok()
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .map(|s| s.trim().to_string())
+        .unwrap_or_else(|| "1000".into())
 }
 
 /// Recursively copy a directory tree.

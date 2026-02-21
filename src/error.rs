@@ -2,6 +2,7 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use serde_json::json;
 use std::fmt;
+use tracing::error;
 
 #[derive(Debug)]
 pub enum AppError {
@@ -53,6 +54,10 @@ impl IntoResponse for AppError {
             AppError::Sandbox(err) => (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()),
             AppError::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.clone()),
         };
+
+        if status == StatusCode::INTERNAL_SERVER_ERROR {
+            error!(status = 500, %message, "request failed");
+        }
 
         let body = axum::Json(json!({ "error": message }));
         (status, body).into_response()

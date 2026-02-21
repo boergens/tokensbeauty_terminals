@@ -82,7 +82,7 @@ pub fn tmux_send_keys(socket: &str, session: &str, text: &str) -> Result<(), San
     debug!(socket, session, %text, "sending keys");
 
     let output = Command::new("tmux")
-        .args(["-L", socket, "send-keys", "-t", session, text, "Enter"])
+        .args(["-L", socket, "send-keys", "-t", session, "--", text, "Enter"])
         .output()
         .map_err(|e| SandboxError::TmuxFailed(format!("failed to spawn tmux send-keys: {}", e)))?;
 
@@ -104,7 +104,7 @@ pub fn tmux_send_keys_raw(
 ) -> Result<(), SandboxError> {
     debug!(socket, session, ?keys, "sending raw keys");
 
-    let mut args = vec!["-L", socket, "send-keys", "-t", session];
+    let mut args = vec!["-L", socket, "send-keys", "-t", session, "--"];
     args.extend(keys);
 
     let output = Command::new("tmux")
