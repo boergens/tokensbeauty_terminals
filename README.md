@@ -61,8 +61,6 @@ The service maintains a warm pool of pre-created instances so new terminals can 
 | `POST` | `/instances/:id/input` | Send text/keys to terminal |
 | `GET` | `/instances/:id/screen` | Capture terminal content |
 
-Full API documentation: [doc/terminals.md](../doc/terminals.md)
-
 ## Architecture
 
 ```
