@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use tokio::sync::broadcast;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -20,12 +21,14 @@ pub struct Instance {
     pub created_at: std::time::Instant,
     pub ttyd_port: Option<u16>,
     pub ttyd_pid: Option<u32>,
+    pub event_tx: broadcast::Sender<String>,
 }
 
 impl Instance {
     pub fn new(id: Uuid, workspace: PathBuf) -> Self {
         let tmux_socket = format!("inst-{}", id);
         let tmux_session = format!("sess-{}", id);
+        let (event_tx, _) = broadcast::channel(64);
         Self {
             id,
             status: InstanceStatus::Warm,
@@ -35,6 +38,7 @@ impl Instance {
             created_at: std::time::Instant::now(),
             ttyd_port: None,
             ttyd_pid: None,
+            event_tx,
         }
     }
 

@@ -5,6 +5,7 @@ use crate::sandbox;
 use std::collections::HashMap;
 use std::net::TcpListener;
 use std::sync::{Arc, Mutex};
+use tokio::sync::broadcast;
 use tokio::task;
 use tracing::{error, info, warn};
 use uuid::Uuid;
@@ -97,16 +98,37 @@ impl InstanceManager {
             let _ = std::fs::copy(template, workspace.join("CLAUDE.md"));
         }
 
+        // Copy respond binary into workspace so it's on PATH inside the sandbox
+        let respond_src = std::env::current_exe()
+            .ok()
+            .and_then(|p| p.parent().map(|d| d.join("respond")));
+        if let Some(ref src) = respond_src {
+            if src.exists() {
+                let bin_dir = workspace.join(".local/bin");
+                std::fs::create_dir_all(&bin_dir).map_err(|e| {
+                    SandboxError::WorkspaceCreation(format!("failed to create .local/bin: {}", e))
+                })?;
+                std::fs::copy(src, bin_dir.join("respond")).map_err(|e| {
+                    SandboxError::WorkspaceCreation(format!(
+                        "failed to copy respond binary: {}",
+                        e
+                    ))
+                })?;
+            }
+        }
+
         let instance = Instance::new(id, workspace.clone());
         let socket = instance.tmux_socket.clone();
         let session = instance.tmux_session.clone();
         let ws = workspace.clone();
+        let id_str = id.to_string();
+        let server_url = format!("http://127.0.0.1:{}", self.config.port);
 
         // Spawn tmux+bwrap on a blocking thread
         let boot_socket = socket.clone();
         let boot_session = session.clone();
         task::spawn_blocking(move || {
-            sandbox::tmux_new_session(&socket, &session, &ws)?;
+            sandbox::tmux_new_session(&socket, &session, &ws, &id_str, &server_url)?;
 
             // Wait for bash prompt to appear
             wait_for_screen(&boot_socket, &boot_session, "$", 10)?;
@@ -279,6 +301,26 @@ impl InstanceManager {
             .get(&id)
             .map(|inst| inst.info())
             .ok_or_else(|| AppError::NotFound(format!("instance {} not found", id)))
+    }
+
+    /// Send an event through the instance's broadcast channel.
+    pub fn send_event(&self, id: Uuid, message: String) -> Result<(), AppError> {
+        let state = self.state.lock().unwrap();
+        let inst = state
+            .get(&id)
+            .ok_or_else(|| AppError::NotFound(format!("instance {} not found", id)))?;
+        // Ignore send errors (no active receivers)
+        let _ = inst.event_tx.send(message);
+        Ok(())
+    }
+
+    /// Subscribe to an instance's event stream.
+    pub fn subscribe_events(&self, id: Uuid) -> Result<broadcast::Receiver<String>, AppError> {
+        let state = self.state.lock().unwrap();
+        let inst = state
+            .get(&id)
+            .ok_or_else(|| AppError::NotFound(format!("instance {} not found", id)))?;
+        Ok(inst.event_tx.subscribe())
     }
 
     /// Count warm instances.

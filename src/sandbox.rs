@@ -4,7 +4,7 @@ use std::process::Command;
 use tracing::{debug, error};
 
 /// Build the bwrap command arguments for launching a sandboxed bash shell.
-pub fn bwrap_args(workspace: &Path) -> Vec<String> {
+pub fn bwrap_args(workspace: &Path, instance_id: &str, server_url: &str) -> Vec<String> {
     let workspace_str = workspace.display().to_string();
     [
         "--ro-bind", "/usr", "/usr",
@@ -21,7 +21,9 @@ pub fn bwrap_args(workspace: &Path) -> Vec<String> {
         "--bind", &workspace_str, "/home/sandbox",
         "--chdir", "/home/sandbox",
         "--setenv", "HOME", "/home/sandbox",
-        "--setenv", "PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/home/kevin/.local/bin",
+        "--setenv", "PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/home/kevin/.local/bin:/home/sandbox/.local/bin",
+        "--setenv", "TERMINAL_SERVER_URL", server_url,
+        "--setenv", "INSTANCE_ID", instance_id,
         "--unsetenv", "CLAUDECODE",
         "--unshare-pid",
         "--die-with-parent",
@@ -34,8 +36,8 @@ pub fn bwrap_args(workspace: &Path) -> Vec<String> {
 }
 
 /// Build the full shell command string that tmux will run.
-pub fn bwrap_shell_command(workspace: &Path) -> String {
-    let args = bwrap_args(workspace);
+pub fn bwrap_shell_command(workspace: &Path, instance_id: &str, server_url: &str) -> String {
+    let args = bwrap_args(workspace, instance_id, server_url);
     let mut cmd = String::from("bwrap");
     for arg in &args {
         cmd.push(' ');
@@ -56,8 +58,10 @@ pub fn tmux_new_session(
     socket: &str,
     session: &str,
     workspace: &Path,
+    instance_id: &str,
+    server_url: &str,
 ) -> Result<(), SandboxError> {
-    let shell_cmd = bwrap_shell_command(workspace);
+    let shell_cmd = bwrap_shell_command(workspace, instance_id, server_url);
     debug!(socket, session, %shell_cmd, "creating tmux session");
 
     let output = Command::new("tmux")

@@ -3,11 +3,21 @@ name = "terminals"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "terminals"
+path = "src/main.rs"
+
+[[bin]]
+name = "respond"
+path = "src/bin/respond.rs"
+
 [dependencies]
 axum = "0.8"
 tokio = { version = "1", features = ["full"] }
+tokio-stream = { version = "0.1", features = ["sync"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 uuid = { version = "1", features = ["v4", "serde"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+minreq = "2"

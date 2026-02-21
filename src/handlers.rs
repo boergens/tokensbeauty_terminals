@@ -1,7 +1,10 @@
 use axum::extract::{Path, State};
+use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::Html;
 use axum::Json;
 use serde::{Deserialize, Serialize};
+use std::convert::Infallible;
+use tokio_stream::{Stream, StreamExt};
 use tracing::error;
 use uuid::Uuid;
 
@@ -30,10 +33,16 @@ pub struct PoolStatus {
     pub max_size: usize,
 }
 
+#[derive(Deserialize)]
+pub struct ResponseRequest {
+    pub message: String,
+}
+
 #[derive(Serialize)]
 pub struct HealthResponse {
     pub status: &'static str,
 }
+
 
 // --- Handlers ---
 
@@ -120,7 +129,28 @@ pub async fn capture_screen(
     Ok(Json(ScreenResponse { content }))
 }
 
+pub async fn receive_response(
+    State(mgr): State<InstanceManager>,
+    Path(id): Path<Uuid>,
+    Json(req): Json<ResponseRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    mgr.send_event(id, req.message.clone()).map_err(|e| {
+        error!(%id, message = %req.message, %e, "failed to send event");
+        e
+    })?;
+    Ok(Json(serde_json::json!({ "status": "sent" })))
+}
 
+pub async fn instance_events(
+    State(mgr): State<InstanceManager>,
+    Path(id): Path<Uuid>,
+) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, AppError> {
+    let rx = mgr.subscribe_events(id)?;
+    let stream = tokio_stream::wrappers::BroadcastStream::new(rx)
+        .filter_map(|result| result.ok())
+        .map(|msg| Ok(Event::default().data(msg)));
+    Ok(Sse::new(stream).keep_alive(KeepAlive::default()))
+}
 
 pub async fn dashboard(
     State(mgr): State<InstanceManager>,
