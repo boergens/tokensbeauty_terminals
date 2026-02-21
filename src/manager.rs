@@ -137,7 +137,7 @@ impl InstanceManager {
             sandbox::tmux_send_keys(&boot_socket, &boot_session, "claude --dangerously-skip-permissions")?;
 
             // Wait for the skip-permissions confirmation prompt
-            wait_for_screen(&boot_socket, &boot_session, "Skip permissions", 15)?;
+            wait_for_screen(&boot_socket, &boot_session, "Bypass Permissions", 15)?;
 
             // Select "Yes" and confirm
             sandbox::tmux_send_keys_raw(&boot_socket, &boot_session, &["Down"])?;
