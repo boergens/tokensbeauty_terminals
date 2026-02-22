@@ -4,10 +4,17 @@ use axum::Router;
 use crate::handlers;
 use crate::manager::InstanceManager;
 
+async fn build_info() -> axum::Json<serde_json::Value> {
+    axum::Json(serde_json::json!({
+        "buildTimestamp": env!("BUILD_TIMESTAMP")
+    }))
+}
+
 pub fn build_router(manager: InstanceManager) -> Router {
     Router::new()
         .route("/dashboard", get(handlers::dashboard))
         .route("/health", get(handlers::health))
+        .route("/build-info", get(build_info))
         .route("/pool/status", get(handlers::pool_status))
         .route(
             "/instances",
