@@ -60,12 +60,14 @@ pub fn tmux_new_session(
     workspace: &Path,
     instance_id: &str,
     server_url: &str,
+    width: u16,
 ) -> Result<(), SandboxError> {
     let shell_cmd = bwrap_shell_command(workspace, instance_id, server_url);
-    debug!(socket, session, %shell_cmd, "creating tmux session");
+    debug!(socket, session, %shell_cmd, width, "creating tmux session");
 
+    let width_str = width.to_string();
     let output = Command::new("tmux")
-        .args(["-L", socket, "new-session", "-d", "-s", session, "-x", "200", "-y", "50"])
+        .args(["-L", socket, "new-session", "-d", "-s", session, "-x", &width_str, "-y", "50"])
         .arg(&shell_cmd)
         .output()
         .map_err(|e| SandboxError::TmuxFailed(format!("failed to spawn tmux: {}", e)))?;

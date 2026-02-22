@@ -8,6 +8,7 @@ pub struct Config {
     pub pool_max_size: usize,
     pub workspace_base: String,
     pub claude_md_template: String,
+    pub tmux_width: u16,
 }
 
 impl Config {
@@ -30,6 +31,10 @@ impl Config {
                 .unwrap_or_else(|_| "/tmp/terminals-workspaces".into()),
             claude_md_template: env::var("CLAUDE_MD_TEMPLATE")
                 .unwrap_or_else(|_| "/home/kevin/project/tokensbeauty/CLAUDE.md.template".into()),
+            tmux_width: env::var("TMUX_WIDTH")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(80),
         }
     }
 }

@@ -123,12 +123,13 @@ impl InstanceManager {
         let ws = workspace.clone();
         let id_str = id.to_string();
         let server_url = format!("http://127.0.0.1:{}", self.config.port);
+        let tmux_width = self.config.tmux_width;
 
         // Spawn tmux+bwrap on a blocking thread
         let boot_socket = socket.clone();
         let boot_session = session.clone();
         task::spawn_blocking(move || {
-            sandbox::tmux_new_session(&socket, &session, &ws, &id_str, &server_url)?;
+            sandbox::tmux_new_session(&socket, &session, &ws, &id_str, &server_url, tmux_width)?;
 
             // Wait for bash prompt to appear
             wait_for_screen(&boot_socket, &boot_session, "$", 10)?;
