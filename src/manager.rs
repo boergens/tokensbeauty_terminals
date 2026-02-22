@@ -267,6 +267,14 @@ impl InstanceManager {
         .await
         .map_err(|e| AppError::Internal(format!("join error: {}", e)))??;
 
+        // Mark instance as awaiting a response (for watchdog)
+        {
+            let mut state = self.state.lock().unwrap();
+            if let Some(inst) = state.get_mut(&id) {
+                inst.awaiting_response = true;
+            }
+        }
+
         Ok(())
     }
 

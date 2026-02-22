@@ -62,12 +62,14 @@ pub fn spawn_watchdog(manager: InstanceManager) -> tokio::task::JoinHandle<()> {
                     let mut state = manager.state.lock().unwrap();
                     if let Some(inst) = state.get_mut(&id) {
                         if inst.last_screen_hash == Some(hash) {
-                            // Screen unchanged — check how long
-                            inst.last_screen_change.elapsed().as_secs() >= STUCK_THRESHOLD_SECS
+                            // Screen unchanged — only nudge if we sent input and it's been long enough
+                            inst.awaiting_response
+                                && inst.last_screen_change.elapsed().as_secs() >= STUCK_THRESHOLD_SECS
                         } else {
-                            // Screen changed — update tracking
+                            // Screen changed — update tracking and clear awaiting flag
                             inst.last_screen_hash = Some(hash);
                             inst.last_screen_change = std::time::Instant::now();
+                            inst.awaiting_response = false;
                             false
                         }
                     } else {

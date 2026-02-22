@@ -24,6 +24,7 @@ pub struct Instance {
     pub event_tx: broadcast::Sender<String>,
     pub last_screen_hash: Option<u64>,
     pub last_screen_change: std::time::Instant,
+    pub awaiting_response: bool,
 }
 
 impl Instance {
@@ -44,6 +45,7 @@ impl Instance {
             event_tx,
             last_screen_hash: None,
             last_screen_change: now,
+            awaiting_response: false,
         }
     }
 
