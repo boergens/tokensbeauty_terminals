@@ -22,6 +22,8 @@ pub struct Instance {
     pub ttyd_port: Option<u16>,
     pub ttyd_pid: Option<u32>,
     pub event_tx: broadcast::Sender<String>,
+    pub last_screen_hash: Option<u64>,
+    pub last_screen_change: std::time::Instant,
 }
 
 impl Instance {
@@ -29,16 +31,19 @@ impl Instance {
         let tmux_socket = format!("inst-{}", id);
         let tmux_session = format!("sess-{}", id);
         let (event_tx, _) = broadcast::channel(64);
+        let now = std::time::Instant::now();
         Self {
             id,
             status: InstanceStatus::Warm,
             workspace,
             tmux_socket,
             tmux_session,
-            created_at: std::time::Instant::now(),
+            created_at: now,
             ttyd_port: None,
             ttyd_pid: None,
             event_tx,
+            last_screen_hash: None,
+            last_screen_change: now,
         }
     }
 

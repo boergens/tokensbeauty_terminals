@@ -478,6 +478,24 @@ impl InstanceManager {
         Ok(())
     }
 
+    /// Get the list of Claimed instance IDs along with their tmux socket/session info.
+    pub fn claimed_instances(&self) -> Vec<(Uuid, String, String)> {
+        let state = self.state.lock().unwrap();
+        state
+            .values()
+            .filter(|inst| inst.status == InstanceStatus::Claimed)
+            .map(|inst| (inst.id, inst.tmux_socket.clone(), inst.tmux_session.clone()))
+            .collect()
+    }
+
+    /// Nudge a stuck instance by sending Escape then a continue prompt.
+    pub async fn nudge_instance(&self, id: Uuid) -> Result<(), AppError> {
+        self.send_keys_raw(id, vec!["Escape".to_string()]).await?;
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        self.send_prompt(id, "Continue with the task. If you are waiting for user input, proceed with reasonable defaults.").await?;
+        Ok(())
+    }
+
     fn get_tmux_info(&self, id: Uuid) -> Result<(String, String), AppError> {
         let state = self.state.lock().unwrap();
         let inst = state

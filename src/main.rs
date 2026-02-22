@@ -6,6 +6,7 @@ mod manager;
 mod pool;
 mod routes;
 mod sandbox;
+mod watchdog;
 
 use config::Config;
 use manager::InstanceManager;
@@ -33,6 +34,9 @@ async fn main() {
     // Start pool replenisher
     let pool_handle = pool::spawn_pool_replenisher(manager.clone());
 
+    // Start watchdog for stuck instances
+    let watchdog_handle = watchdog::spawn_watchdog(manager.clone());
+
     // Build router
     let app = routes::build_router(manager.clone());
 
@@ -49,9 +53,10 @@ async fn main() {
         .await
         .expect("server error");
 
-    // Shutdown: abort pool task and destroy all instances
+    // Shutdown: abort background tasks and destroy all instances
     info!("shutting down...");
     pool_handle.abort();
+    watchdog_handle.abort();
     manager.destroy_all().await;
     info!("shutdown complete");
 }
